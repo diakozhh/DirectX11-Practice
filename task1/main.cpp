@@ -31,10 +31,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
       TranslateMessage(&msg);
       DispatchMessage(&msg);
     }
-    else
-    {
-      pRenderer->render();
-    }
+    pRenderer->render();
   }
   pRenderer->deviceCleanup();
 
