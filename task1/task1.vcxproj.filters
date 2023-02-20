@@ -27,4 +27,8 @@
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="vShader.hlsl" />
+    <FxCompile Include="pShader.hlsl" />
+  </ItemGroup>
 </Project>
