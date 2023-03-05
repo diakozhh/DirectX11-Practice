@@ -2,6 +2,7 @@
 #include <directxcolors.h>
 
 #include "renderer.h"
+#include <memory>
 
 using namespace DirectX;
 
@@ -31,7 +32,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
       TranslateMessage(&msg);
       DispatchMessage(&msg);
     }
-    pRenderer->render();
+    if(pRenderer->getState())
+      pRenderer->render();
   }
   pRenderer->deviceCleanup();
 
@@ -41,7 +43,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow) {
   WNDCLASSEX wcex;
   wcex.cbSize = sizeof(WNDCLASSEX);
-  wcex.style = CS_HREDRAW | CS_VREDRAW;
+  wcex.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
   wcex.lpfnWndProc = WndProc;
   wcex.cbClsExtra = 0;
   wcex.cbWndExtra = 0;
@@ -64,13 +66,11 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow) {
     return E_FAIL;
   }
 
-  pRenderer = new Renderer();
-  if (!pRenderer->deviceInit(hWnd)) {
-    delete pRenderer;
-    return E_FAIL;
-  }
-
   ShowWindow(hWnd, nCmdShow);
+
+  SetForegroundWindow(hWnd);
+  SetFocus(hWnd);
+
   UpdateWindow(hWnd);
 
   {
@@ -83,6 +83,13 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow) {
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, TRUE);
 
     MoveWindow(hWnd, 100, 100, rc.right - rc.left, rc.bottom - rc.top, TRUE);
+
+  }
+  
+  pRenderer = new Renderer();
+  if (!pRenderer->deviceInit(hInstance, hWnd, new Camera, new Input(hInstance, hWnd, WindowWidth, WindowHeight))) {
+    delete pRenderer;
+    return E_FAIL;
   }
 
   return TRUE;
