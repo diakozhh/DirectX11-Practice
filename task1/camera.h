@@ -16,7 +16,7 @@ private:
 public:
   Camera() {
     m_poi = XMFLOAT3(0.0f, 0.0f, 0.0f);
-    m_dist = 3.0f;
+    m_dist = 2.0f;
     m_phi = -XM_PIDIV4;
     m_theta = -XM_PIDIV4;
     m_viewMatrix = XMMATRIX();
@@ -25,4 +25,5 @@ public:
   void getState();
   void getMouseState(float dx, float dy, float wheel);
   void getView(XMMATRIX& viewMatrix) { viewMatrix = m_viewMatrix;};
+  XMFLOAT3 getPosition();
 };

@@ -3,6 +3,7 @@
 
 #include "renderer.h"
 #include <memory>
+//#pragma comment(lib, "Winmm.lib")
 
 using namespace DirectX;
 
@@ -65,6 +66,7 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow) {
   if (!hWnd) {
     return E_FAIL;
   }
+  //PlaySound(L"data/molchat.wav", NULL, SND_ASYNC);
 
   ShowWindow(hWnd, nCmdShow);
 

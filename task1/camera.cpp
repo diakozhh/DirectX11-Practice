@@ -33,3 +33,15 @@ void Camera::getMouseState(float dx, float dy, float wheel) {
     m_dist = 1.0f;
   }
 }
+
+XMFLOAT3 Camera::getPosition() {
+  XMFLOAT3 position = XMFLOAT3(
+      cosf(m_theta) * cosf(m_phi), 
+      sinf(m_theta), 
+      cosf(m_theta) * sinf(m_phi));
+
+  position.x = position.x * m_dist + m_poi.x;
+  position.y = position.y * m_dist + m_poi.y;
+  position.z = position.z * m_dist + m_poi.z;
+  return position;
+}
