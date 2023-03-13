@@ -3,12 +3,6 @@
 
 #include "renderer.h"
 
-#define SAFE_RELEASE(p) \
-if (p != NULL) { \
-    p->Release(); \
-    p = NULL;\
-}
-
 HRESULT Renderer::setupBackBuffer() {
   ID3D11Texture2D* pBackBuffer = NULL;
   HRESULT hr = m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
@@ -26,39 +20,49 @@ HRESULT Renderer::initScene() {
   HRESULT hr = S_OK;
   
   static const Vertex Vertices[] = {
-        { -1.0f, 1.0f, -1.0f, RGB(0, 0, 255) },
-        { 1.0f, 1.0f, -1.0f, RGB(0, 255, 0) },
-        { 1.0f, 1.0f, 1.0f, RGB(0, 255, 255) },
-        { -1.0f, 1.0f, 1.0f, RGB(255, 0, 0) },
-        { -1.0f, -1.0f, -1.0f, RGB(255, 0, 255) },
-        { 1.0f, -1.0f, -1.0f, RGB(255, 255, 0) },
-        { 1.0f, -1.0f, 1.0f, RGB(255, 255, 255) },
-        { -1.0f, -1.0f, 1.0f, RGB(0, 0, 0) }
+         {-0.5, -0.5,  0.5, 0, 1},
+        { 0.5, -0.5,  0.5, 1, 1},
+        { 0.5, -0.5, -0.5, 1, 0},
+        {-0.5, -0.5, -0.5, 0, 0},
+
+        {-0.5,  0.5, -0.5, 0, 1},
+        { 0.5,  0.5, -0.5, 1, 1},
+        { 0.5,  0.5,  0.5, 1, 0},
+        {-0.5,  0.5,  0.5, 0, 0},
+
+        { 0.5, -0.5, -0.5, 0, 1},
+        { 0.5, -0.5,  0.5, 1, 1},
+        { 0.5,  0.5,  0.5, 1, 0},
+        { 0.5,  0.5, -0.5, 0, 0},
+
+        {-0.5, -0.5,  0.5, 0, 1},
+        {-0.5, -0.5, -0.5, 1, 1},
+        {-0.5,  0.5, -0.5, 1, 0},
+        {-0.5,  0.5,  0.5, 0, 0},
+
+        { 0.5, -0.5,  0.5, 0, 1},
+        {-0.5, -0.5,  0.5, 1, 1},
+        {-0.5,  0.5,  0.5, 1, 0},
+        { 0.5,  0.5,  0.5, 0, 0},
+
+        {-0.5, -0.5, -0.5, 0, 1},
+        { 0.5, -0.5, -0.5, 1, 1},
+        { 0.5,  0.5, -0.5, 1, 0},
+        {-0.5,  0.5, -0.5, 0, 0}
   };
   
   static const USHORT Indices[] = {
-        3,1,0,
-        2,1,3,
-
-        0,5,4,
-        1,5,0,
-
-        3,4,7,
-        0,4,3,
-
-        1,6,5,
-        2,6,1,
-
-        2,7,6,
-        3,7,2,
-
-        6,4,5,
-        7,4,6,
+        0, 2, 1, 0, 3, 2,
+        4, 6, 5, 4, 7, 6,
+        8, 10, 9, 8, 11, 10,
+        12, 14, 13, 12, 15, 14,
+        16, 18, 17, 16, 19, 18,
+        20, 22, 21, 20, 23, 22
   };
 
   static const D3D11_INPUT_ELEMENT_DESC InputDesc[] = {
     {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-    {"COLOR", 0,  DXGI_FORMAT_R8G8B8A8_UNORM, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0} };
+    {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0} };
 
 
   if (SUCCEEDED(hr)) {
@@ -171,12 +175,38 @@ HRESULT Renderer::initScene() {
     assert(SUCCEEDED(hr));
   }
 
+  try {
+    m_textureArray.emplace_back(m_pDevice, m_pDeviceContext, L"data/kerenski.dds");
+  }
+  catch (...) {
+    return E_FAIL;
+  }
+
+  if (SUCCEEDED(hr)) {
+    D3D11_SAMPLER_DESC desc = {};
+
+    desc.Filter = D3D11_FILTER_ANISOTROPIC;
+    desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.MinLOD = -D3D11_FLOAT32_MAX;
+    desc.MaxLOD = D3D11_FLOAT32_MAX;
+    desc.MipLODBias = 0.0f;
+    desc.MaxAnisotropy = 16;
+    desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    desc.BorderColor[0] = desc.BorderColor[1] = desc.BorderColor[2] = desc.BorderColor[3] = 1.0f;
+
+    hr = m_pDevice->CreateSamplerState(&desc, &m_pSampler);
+    assert(SUCCEEDED(hr));
+  }
+
   return hr;
 }
 
 bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pInput) {
   m_pCamera = pCamera;
   m_pInput = pInput;
+
   HRESULT hr;
 
   IDXGIFactory* pFactory = nullptr;
@@ -261,11 +291,15 @@ bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pI
     if(!m_pInput)
       hr = S_FALSE;
   }
+  if (SUCCEEDED(hr)) {
+    if(!m_pCubeMap)
+      hr = S_FALSE;
+  }
 
   if (FAILED(hr)) {
     deviceCleanup();
   }
-
+  m_pCubeMap = new CubeMap(m_pDevice, m_pDeviceContext, m_width, m_height, 10, 10);
   return SUCCEEDED(hr);
 }
 
@@ -310,9 +344,10 @@ bool Renderer::getState() {
     m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
   }
 
+  m_pCubeMap->getState(m_pDeviceContext, mView, mProjection, m_pCamera->getPosition());
+
   return SUCCEEDED(hr);
 }
-
 
 bool Renderer::render() {
   m_pDeviceContext->ClearState();
@@ -339,11 +374,21 @@ bool Renderer::render() {
   rect.bottom = m_height;
 
   m_pDeviceContext->RSSetScissorRects(1, &rect);
+
+  m_pCubeMap->render(m_pDeviceContext);
+
   m_pDeviceContext->RSSetState(m_pRasterizerState);
+
+  ID3D11SamplerState* samplers[] = { m_pSampler };
+  m_pDeviceContext->PSSetSamplers(0, 1, samplers);
+
+  ID3D11ShaderResourceView* resources[] = { m_textureArray[0].GetTexture() };
+  m_pDeviceContext->PSSetShaderResources(0, 1, resources);
+
   m_pDeviceContext->IASetIndexBuffer(m_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
   ID3D11Buffer* vBuffer[] = {m_pVertexBuffer};
-  UINT strides[] = {16};
+  UINT strides[] = {20};
   UINT offsets[] = {0};
 
   m_pDeviceContext->IASetVertexBuffers(0, 1, vBuffer, strides, offsets);
@@ -377,6 +422,14 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pRasterizerState);
   SAFE_RELEASE(m_pWorldMatrixBuffer);
   SAFE_RELEASE(m_pSceneMatrixBuffer);
+  SAFE_RELEASE(m_pSampler);
+
+  for (auto t : m_textureArray) {
+    t.Release();
+  }
+
+  m_textureArray.clear();
+  delete m_pCubeMap;
 }
 
 bool Renderer::winResize(UINT width, UINT height) {
@@ -391,6 +444,7 @@ bool Renderer::winResize(UINT width, UINT height) {
 
       hr = setupBackBuffer();
       m_pInput->resize(width, height);
+      m_pCubeMap->resize(width, height);
     }
     return SUCCEEDED(hr);
   }

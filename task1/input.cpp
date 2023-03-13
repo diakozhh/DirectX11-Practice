@@ -98,6 +98,3 @@ void Input::resize(int screenW, int screenH) {
   m_screenH = screenH;
   m_screenW = screenW;
 }
-
-
-

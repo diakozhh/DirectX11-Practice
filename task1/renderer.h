@@ -8,10 +8,13 @@
 
 #include "camera.h"
 #include "input.h"
+#include "utils.h"
+#include "cubeMap.h"
+#include "texture.h"
 
 struct Vertex {
   float x, y, z;
-  COLORREF color;
+  float u, v;
 };
 
 struct WorldMatrixBuffer {
@@ -40,12 +43,16 @@ private:
   ID3D11Buffer* m_pWorldMatrixBuffer = nullptr;
   ID3D11Buffer* m_pSceneMatrixBuffer = nullptr;
   ID3D11RasterizerState* m_pRasterizerState = nullptr;
+  ID3D11SamplerState* m_pSampler = nullptr;
+  
+  UINT m_width = 1280;
+  UINT m_height = 720;
 
   Camera* m_pCamera = nullptr;
   Input* m_pInput = nullptr;
 
-  UINT m_width = 0;
-  UINT m_height = 0;
+  CubeMap* m_pCubeMap = nullptr;
+  std::vector<Texture> m_textureArray;
 
   HRESULT setupBackBuffer();
   HRESULT initScene();
