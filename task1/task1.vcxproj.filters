@@ -65,5 +65,7 @@
     <FxCompile Include="pShader.hlsl" />
     <FxCompile Include="CubeMapPixelShader.hlsl" />
     <FxCompile Include="CubeMapVertexShader.hlsl" />
+    <FxCompile Include="TransVertexShader.hlsl" />
+    <FxCompile Include="TransPixelShader.hlsl" />
   </ItemGroup>
 </Project>

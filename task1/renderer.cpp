@@ -1,24 +1,9 @@
 #include <assert.h>
 #include <d3dcompiler.h>
-
+#include <array>
 #include "renderer.h"
 
-HRESULT Renderer::setupBackBuffer() {
-  ID3D11Texture2D* pBackBuffer = NULL;
-  HRESULT hr = m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
-  assert(SUCCEEDED(hr));
-  if (SUCCEEDED(hr)) {
-    hr = m_pDevice->CreateRenderTargetView(pBackBuffer, NULL, &m_pBackBufferRTV);
-    assert(SUCCEEDED(hr));
-
-    SAFE_RELEASE(pBackBuffer);
-  }
-  return hr;
-}
-
-HRESULT Renderer::initScene() {
-  HRESULT hr = S_OK;
-  
+namespace {
   static const Vertex Vertices[] = {
          {-0.5, -0.5,  0.5, 0, 1},
         { 0.5, -0.5,  0.5, 1, 1},
@@ -50,7 +35,7 @@ HRESULT Renderer::initScene() {
         { 0.5,  0.5, -0.5, 1, 0},
         {-0.5,  0.5, -0.5, 0, 0}
   };
-  
+
   static const USHORT Indices[] = {
         0, 2, 1, 0, 3, 2,
         4, 6, 5, 4, 7, 6,
@@ -59,6 +44,58 @@ HRESULT Renderer::initScene() {
         16, 18, 17, 16, 19, 18,
         20, 22, 21, 20, 23, 22
   };
+
+  static const std::array<VertexPos, 4> coloredPlaneVertices =
+  {
+       VertexPos{-1.0, -1.0, 0},
+       VertexPos{-1.0, 1.0, 0},
+       VertexPos{1.0, 1.0, 0},
+       VertexPos{1.0, -1.0, 0},
+  };
+
+  static const std::array<USHORT, 6> coloredPlaneIndices =
+  {
+       0, 2, 1, 0, 3, 2,
+  };
+}
+
+HRESULT Renderer::setupBackBuffer() {
+  ID3D11Texture2D* pBackBuffer = NULL;
+  HRESULT hr = m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+  assert(SUCCEEDED(hr));
+  if (SUCCEEDED(hr)) {
+    hr = m_pDevice->CreateRenderTargetView(pBackBuffer, NULL, &m_pBackBufferRTV);
+    assert(SUCCEEDED(hr));
+
+    SAFE_RELEASE(pBackBuffer);
+  }
+  if (SUCCEEDED(hr)) {
+    SAFE_RELEASE(m_pDepthBuffer);
+    SAFE_RELEASE(m_pDepthBufferDSV);
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Format = DXGI_FORMAT_D16_UNORM;
+    desc.ArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.Height = m_height;
+    desc.Width = m_width;
+    desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+
+    hr = m_pDevice->CreateTexture2D(&desc, NULL, &m_pDepthBuffer);
+    if (SUCCEEDED(hr)) {
+      hr = m_pDevice->CreateDepthStencilView(m_pDepthBuffer, NULL, &m_pDepthBufferDSV);
+    }
+    m_pDeviceContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthBufferDSV);
+  }
+  return hr;
+}
+
+HRESULT Renderer::initScene() {
+  HRESULT hr = S_OK;
 
   static const D3D11_INPUT_ELEMENT_DESC InputDesc[] = {
     {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -143,6 +180,8 @@ HRESULT Renderer::initScene() {
     data.SysMemSlicePitch = 0;
 
     hr = m_pDevice->CreateBuffer(&desc, &data, &m_pWorldMatrixBuffer);
+    if(SUCCEEDED(hr))
+      hr = m_pDevice->CreateBuffer(&desc, &data, &m_pWorldMatrixBuffer1);
     assert(SUCCEEDED(hr));
   }
   if (SUCCEEDED(hr)) {
@@ -199,7 +238,162 @@ HRESULT Renderer::initScene() {
     hr = m_pDevice->CreateSamplerState(&desc, &m_pSampler);
     assert(SUCCEEDED(hr));
   }
+  //create depth state
+  if (SUCCEEDED(hr)) {
+    D3D11_DEPTH_STENCIL_DESC dsDesc = { 0 };
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+    dsDesc.DepthFunc = D3D11_COMPARISON_GREATER_EQUAL;
+    dsDesc.StencilEnable = FALSE;
 
+    hr = m_pDevice->CreateDepthStencilState(&dsDesc, &m_pDepthState);
+    assert(SUCCEEDED(hr));
+  }
+  
+  // Create vertex buffer
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = static_cast<UINT>(sizeof(VertexPos) * coloredPlaneVertices.size());
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+
+    D3D11_SUBRESOURCE_DATA data;
+    data.pSysMem = coloredPlaneVertices.data();
+    data.SysMemPitch = static_cast<UINT>(sizeof(VertexPos) * coloredPlaneVertices.size());
+    data.SysMemSlicePitch = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, &data, &m_pTransparentVertexBuffer);
+    assert(SUCCEEDED(hr));
+  }
+  //create index buffer
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = static_cast<UINT>(sizeof(USHORT) * coloredPlaneIndices.size());
+    desc.Usage = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+
+    D3D11_SUBRESOURCE_DATA data;
+    data.pSysMem = coloredPlaneIndices.data();
+    data.SysMemPitch = static_cast<UINT>(sizeof(USHORT) * coloredPlaneIndices.size());
+    data.SysMemSlicePitch = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, &data, &m_pTransparentIndexBuffer);
+    assert(SUCCEEDED(hr));
+  }
+
+  //init shader
+  ID3D10Blob* transVertexShaderBuffer = nullptr;
+  ID3D10Blob* transPixelShaderBuffer = nullptr;
+
+  int tflags = 0;
+#ifdef _DEBUG
+  tflags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#endif
+
+  if (SUCCEEDED(hr)) {
+    hr = D3DCompileFromFile(L"TransVertexShader.hlsl", NULL, NULL, "main", "vs_5_0", flags, 0, &transVertexShaderBuffer, NULL);
+    hr = m_pDevice->CreateVertexShader(transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), NULL, &m_pVertexShader);
+  }
+  if (SUCCEEDED(hr)) {
+    hr = D3DCompileFromFile(L"TransPixelShader.hlsl", NULL, NULL, "main", "ps_5_0", flags, 0, &transPixelShaderBuffer, NULL);
+    hr = m_pDevice->CreatePixelShader(transPixelShaderBuffer->GetBufferPointer(), transPixelShaderBuffer->GetBufferSize(), NULL, &m_pPixelShader);
+  }
+  if (SUCCEEDED(hr)) {
+    int numElements = sizeof(InputDesc) / sizeof(InputDesc[0]);
+    hr = m_pDevice->CreateInputLayout(InputDesc, numElements, transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), &m_pInputLayout);
+  }
+
+  SAFE_RELEASE(transVertexShaderBuffer);
+  SAFE_RELEASE(transPixelShaderBuffer);
+
+  //create const buffer
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(TransparentWorldBuffer);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+
+    WorldMatrixBuffer worldMatrixBuffer;
+    worldMatrixBuffer.mWorldMatrix = DirectX::XMMatrixIdentity();
+
+    D3D11_SUBRESOURCE_DATA data;
+    data.pSysMem = &worldMatrixBuffer;
+    data.SysMemPitch = sizeof(worldMatrixBuffer);
+    data.SysMemSlicePitch = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, NULL, &m_pTransparentWorldBuffer);
+    if(SUCCEEDED(hr))
+      hr = m_pDevice->CreateBuffer(&desc, NULL, &m_pTransparentWorldBuffer1);
+    assert(SUCCEEDED(hr));
+  }
+  //create rasterizer state
+  if (SUCCEEDED(hr)) {
+    D3D11_RASTERIZER_DESC rasterizeDesc = {};
+    rasterizeDesc.AntialiasedLineEnable = false;
+    rasterizeDesc.FillMode = D3D11_FILL_SOLID;
+    rasterizeDesc.CullMode = D3D11_CULL_NONE;
+    rasterizeDesc.DepthBias = 0;
+    rasterizeDesc.DepthBiasClamp = 0.0f;
+    rasterizeDesc.FrontCounterClockwise = false;
+    rasterizeDesc.DepthClipEnable = true;
+    rasterizeDesc.ScissorEnable = false;
+    rasterizeDesc.MultisampleEnable = false;
+    rasterizeDesc.SlopeScaledDepthBias = 0.0f;
+
+    hr = m_pDevice->CreateRasterizerState(&rasterizeDesc, &m_pTransparentRasterizerState);
+    assert(SUCCEEDED(hr));
+  }
+  //create blend state
+  if (SUCCEEDED(hr)) {
+    D3D11_BLEND_DESC blendDesc;
+    blendDesc.AlphaToCoverageEnable = false;
+    blendDesc.IndependentBlendEnable = false;
+    blendDesc.RenderTarget[0].BlendEnable = true;
+    blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    blendDesc.RenderTarget[0].RenderTargetWriteMask =
+      D3D11_COLOR_WRITE_ENABLE_RED |
+      D3D11_COLOR_WRITE_ENABLE_GREEN |
+      D3D11_COLOR_WRITE_ENABLE_BLUE;
+    blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+    blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
+
+    hr = m_pDevice->CreateBlendState(&blendDesc, &m_pTransparentBlendState);
+    assert(SUCCEEDED(hr));
+  }
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(SceneMatrixBuffer);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, NULL, &m_pTransparentSceneBuffer);
+    assert(SUCCEEDED(hr));
+  }
+  
+  if (SUCCEEDED(hr)) {
+    D3D11_DEPTH_STENCIL_DESC dsDesc = { 0 };
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = D3D11_COMPARISON_GREATER;
+    dsDesc.StencilEnable = FALSE;
+    hr = m_pDevice->CreateDepthStencilState(&dsDesc, &m_pTransparentDepthState);
+    assert(SUCCEEDED(hr));
+  }
   return hr;
 }
 
@@ -324,8 +518,29 @@ bool Renderer::getState() {
   t = (timeCur - timeStart) / 1000.0f;
 
   WorldMatrixBuffer wmb;
-  wmb.mWorldMatrix = XMMatrixRotationY(t);
-  m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, nullptr, &wmb, 0, 0);
+  //wmb.mWorldMatrix = XMMatrixRotationY(t);
+  //m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, nullptr, &wmb, 0, 0);
+
+  wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
+    DirectX::XMMatrixRotationY(t),
+    DirectX::XMMatrixTranslation(0.0f, 0.0f, -1.5f));
+  m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, NULL, &wmb, 0, 0);
+
+  wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
+    DirectX::XMMatrixRotationX(t),
+    DirectX::XMMatrixTranslation(0.0f, 0.0f, 1.5f));
+  m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer1, 0, NULL, &wmb, 0, 0);
+
+
+  TransparentWorldBuffer transparentWorldBuffer;
+  transparentWorldBuffer.worldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, -0.1f);
+  transparentWorldBuffer.color = DirectX::XMFLOAT4(1.0f, 1.0f, 0.0f, 0.5f);
+  m_pDeviceContext->UpdateSubresource(m_pTransparentWorldBuffer, 0, NULL, &transparentWorldBuffer, 0, 0);
+
+  transparentWorldBuffer.worldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, 0.1f);
+  transparentWorldBuffer.color = DirectX::XMFLOAT4(0.0f, 1.0f, 1.0f, 0.5f);
+  m_pDeviceContext->UpdateSubresource(m_pTransparentWorldBuffer1, 0, NULL, &transparentWorldBuffer, 0, 0);
+
 
   XMMATRIX mView;
   m_pCamera->getView(mView);
@@ -341,7 +556,9 @@ bool Renderer::getState() {
   if (SUCCEEDED(hr)) {
     SceneMatrixBuffer& sceneBuffer = *reinterpret_cast<SceneMatrixBuffer*>(subresource.pData);
     sceneBuffer.mViewProjectionMatrix = XMMatrixMultiply(mView, mProjection);
-    m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
+    //m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
+    m_pDeviceContext->UpdateSubresource(m_pSceneMatrixBuffer, 0, NULL, &sceneBuffer, 0, 0);
+    m_pDeviceContext->UpdateSubresource(m_pTransparentSceneBuffer, 0, NULL, &sceneBuffer, 0, 0);
   }
 
   m_pCubeMap->getState(m_pDeviceContext, mView, mProjection, m_pCamera->getPosition());
@@ -353,9 +570,12 @@ bool Renderer::render() {
   m_pDeviceContext->ClearState();
 
   ID3D11RenderTargetView* views[] = { m_pBackBufferRTV };
-  m_pDeviceContext->OMSetRenderTargets(1, views, nullptr);
+  //m_pDeviceContext->OMSetRenderTargets(1, views, nullptr);
+  m_pDeviceContext->OMSetRenderTargets(1, views, m_pDepthBufferDSV);
+
   static const FLOAT BackColor[4] = { 0.75f, 0.25f, 0.25f, 1.0f };
   m_pDeviceContext->ClearRenderTargetView(m_pBackBufferRTV, BackColor);
+  m_pDeviceContext->ClearDepthStencilView(m_pDepthBufferDSV, D3D11_CLEAR_DEPTH, 0.0f, 0);
 
   D3D11_VIEWPORT vp;
   vp.TopLeftX = 0;
@@ -366,6 +586,7 @@ bool Renderer::render() {
   vp.MaxDepth = 1.0f;
 
   m_pDeviceContext->RSSetViewports(1, &vp);
+  m_pDeviceContext->OMSetDepthStencilState(m_pDepthState, 0);
 
   D3D11_RECT rect;
   rect.left = 0;
@@ -375,10 +596,10 @@ bool Renderer::render() {
 
   m_pDeviceContext->RSSetScissorRects(1, &rect);
 
-  m_pCubeMap->render(m_pDeviceContext);
+  //m_pCubeMap->render(m_pDeviceContext);
 
   m_pDeviceContext->RSSetState(m_pRasterizerState);
-
+  m_pDeviceContext->OMSetDepthStencilState(m_pDepthState, 0);
   ID3D11SamplerState* samplers[] = { m_pSampler };
   m_pDeviceContext->PSSetSamplers(0, 1, samplers);
 
@@ -387,11 +608,11 @@ bool Renderer::render() {
 
   m_pDeviceContext->IASetIndexBuffer(m_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-  ID3D11Buffer* vBuffer[] = {m_pVertexBuffer};
-  UINT strides[] = {20};
-  UINT offsets[] = {0};
+  ID3D11Buffer* vBuffer1[] = {m_pVertexBuffer};
+  UINT strides1[] = {20};
+  UINT offsets1[] = {0};
 
-  m_pDeviceContext->IASetVertexBuffers(0, 1, vBuffer, strides, offsets);
+  m_pDeviceContext->IASetVertexBuffers(0, 1, vBuffer1, strides1, offsets1);
   m_pDeviceContext->IASetInputLayout(m_pInputLayout);
   m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
@@ -399,6 +620,32 @@ bool Renderer::render() {
   m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
   m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
   m_pDeviceContext->DrawIndexed(36, 0, 0);
+
+  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pWorldMatrixBuffer1);
+  m_pDeviceContext->DrawIndexed(36, 0, 0);
+
+  m_pDeviceContext->IASetIndexBuffer(m_pTransparentIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+  ID3D11Buffer* vertexBuffers[] = { m_pTransparentVertexBuffer };
+  UINT strides[] = { 12 };
+  UINT offsets[] = { 0 };
+  m_pDeviceContext->IASetVertexBuffers(0, 1, vertexBuffers, strides, offsets);
+  m_pDeviceContext->IASetInputLayout(m_pTransparentInputLayout);
+  m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  m_pDeviceContext->RSSetState(m_pTransparentRasterizerState);
+  m_pDeviceContext->VSSetShader(m_pTransparentVertexShader, NULL, 0);
+
+  m_pDeviceContext->OMSetBlendState(m_pTransparentBlendState, NULL, 0xFFFFFFFF);
+  m_pDeviceContext->OMSetDepthStencilState(m_pTransparentDepthState, 0);
+
+  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer);
+  m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer);
+  m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pTransparentSceneBuffer);
+  m_pDeviceContext->PSSetShader(m_pTransparentPixelShader, NULL, 0);
+  m_pDeviceContext->DrawIndexed(static_cast<UINT>(coloredPlaneIndices.size()), 0, 0);
+
+  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer1);
+  m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer1);
+  m_pDeviceContext->DrawIndexed(static_cast<UINT>(coloredPlaneIndices.size()), 0, 0);
 
   HRESULT hr = m_pSwapChain->Present(1, 0);
   assert(SUCCEEDED(hr));
@@ -421,9 +668,26 @@ void Renderer::deviceCleanup() {
 
   SAFE_RELEASE(m_pRasterizerState);
   SAFE_RELEASE(m_pWorldMatrixBuffer);
+  SAFE_RELEASE(m_pWorldMatrixBuffer1);
   SAFE_RELEASE(m_pSceneMatrixBuffer);
   SAFE_RELEASE(m_pSampler);
 
+  SAFE_RELEASE(m_pDepthState);
+
+  SAFE_RELEASE(m_pTransparentVertexShader);
+  SAFE_RELEASE(m_pTransparentPixelShader);
+  SAFE_RELEASE(m_pTransparentInputLayout);
+  SAFE_RELEASE(m_pTransparentVertexBuffer);
+  SAFE_RELEASE(m_pTransparentIndexBuffer);
+  SAFE_RELEASE(m_pTransparentWorldBuffer);
+  SAFE_RELEASE(m_pTransparentWorldBuffer1);
+  SAFE_RELEASE(m_pTransparentSceneBuffer);
+  SAFE_RELEASE(m_pTransparentRasterizerState);
+  SAFE_RELEASE(m_pTransparentDepthState);
+  SAFE_RELEASE(m_pTransparentBlendState);
+
+  SAFE_RELEASE(m_pDepthBuffer);
+  SAFE_RELEASE(m_pDepthBufferDSV);
   for (auto t : m_textureArray) {
     t.Release();
   }
