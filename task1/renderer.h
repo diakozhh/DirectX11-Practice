@@ -83,7 +83,7 @@ private:
 
   CubeMap* m_pCubeMap = nullptr;
   std::vector<Texture> m_textureArray;
-  bool m_yellowRect = false;
+
   HRESULT setupBackBuffer();
   HRESULT initScene();
   void inputMovement();

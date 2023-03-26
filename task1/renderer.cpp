@@ -298,15 +298,15 @@ HRESULT Renderer::initScene() {
 
   if (SUCCEEDED(hr)) {
     hr = D3DCompileFromFile(L"TransVertexShader.hlsl", NULL, NULL, "main", "vs_5_0", flags, 0, &transVertexShaderBuffer, NULL);
-    hr = m_pDevice->CreateVertexShader(transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), NULL, &m_pVertexShader);
+    hr = m_pDevice->CreateVertexShader(transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), NULL, &m_pTransparentVertexShader);
   }
   if (SUCCEEDED(hr)) {
     hr = D3DCompileFromFile(L"TransPixelShader.hlsl", NULL, NULL, "main", "ps_5_0", flags, 0, &transPixelShaderBuffer, NULL);
-    hr = m_pDevice->CreatePixelShader(transPixelShaderBuffer->GetBufferPointer(), transPixelShaderBuffer->GetBufferSize(), NULL, &m_pPixelShader);
+    hr = m_pDevice->CreatePixelShader(transPixelShaderBuffer->GetBufferPointer(), transPixelShaderBuffer->GetBufferSize(), NULL, &m_pTransparentPixelShader);
   }
   if (SUCCEEDED(hr)) {
     int numElements = sizeof(InputDesc) / sizeof(InputDesc[0]);
-    hr = m_pDevice->CreateInputLayout(InputDesc, numElements, transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), &m_pInputLayout);
+    hr = m_pDevice->CreateInputLayout(InputDesc, numElements, transVertexShaderBuffer->GetBufferPointer(), transVertexShaderBuffer->GetBufferSize(), &m_pTransparentInputLayout);
   }
 
   SAFE_RELEASE(transVertexShaderBuffer);
@@ -372,6 +372,7 @@ HRESULT Renderer::initScene() {
     hr = m_pDevice->CreateBlendState(&blendDesc, &m_pTransparentBlendState);
     assert(SUCCEEDED(hr));
   }
+
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
     desc.ByteWidth = sizeof(SceneMatrixBuffer);
@@ -518,27 +519,25 @@ bool Renderer::getState() {
   t = (timeCur - timeStart) / 1000.0f;
 
   WorldMatrixBuffer wmb;
-  //wmb.mWorldMatrix = XMMatrixRotationY(t);
-  //m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, nullptr, &wmb, 0, 0);
 
   wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
     DirectX::XMMatrixRotationY(t),
-    DirectX::XMMatrixTranslation(0.0f, 0.0f, -1.5f));
+    DirectX::XMMatrixTranslation(0.0f, 0.0f, -1.0f));
   m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, NULL, &wmb, 0, 0);
 
   wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
-    DirectX::XMMatrixRotationX(t),
-    DirectX::XMMatrixTranslation(0.0f, 0.0f, 1.5f));
+    DirectX::XMMatrixRotationY(-t),
+    DirectX::XMMatrixTranslation(0.0f, 0.0f, 1.0f));
   m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer1, 0, NULL, &wmb, 0, 0);
 
 
   TransparentWorldBuffer transparentWorldBuffer;
   transparentWorldBuffer.worldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, -0.1f);
-  transparentWorldBuffer.color = DirectX::XMFLOAT4(1.0f, 1.0f, 0.0f, 0.5f);
+  transparentWorldBuffer.color = DirectX::XMFLOAT4(0.0f, 1.0f, 0.5f, 0.5f);
   m_pDeviceContext->UpdateSubresource(m_pTransparentWorldBuffer, 0, NULL, &transparentWorldBuffer, 0, 0);
 
   transparentWorldBuffer.worldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, 0.1f);
-  transparentWorldBuffer.color = DirectX::XMFLOAT4(0.0f, 1.0f, 1.0f, 0.5f);
+  transparentWorldBuffer.color = DirectX::XMFLOAT4(0.0f, 0.6f, 1.0f, 0.5f);
   m_pDeviceContext->UpdateSubresource(m_pTransparentWorldBuffer1, 0, NULL, &transparentWorldBuffer, 0, 0);
 
 
@@ -548,7 +547,7 @@ bool Renderer::getState() {
   XMMATRIX mProjection = XMMatrixPerspectiveFovLH(
       XM_PIDIV2, 
       m_width / (FLOAT)m_height, 
-      0.01f, 100.0f);
+      100.0f, 0.01f);
 
   D3D11_MAPPED_SUBRESOURCE subresource;
   hr = m_pDeviceContext->Map(m_pSceneMatrixBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource);
@@ -556,8 +555,7 @@ bool Renderer::getState() {
   if (SUCCEEDED(hr)) {
     SceneMatrixBuffer& sceneBuffer = *reinterpret_cast<SceneMatrixBuffer*>(subresource.pData);
     sceneBuffer.mViewProjectionMatrix = XMMatrixMultiply(mView, mProjection);
-    //m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
-    m_pDeviceContext->UpdateSubresource(m_pSceneMatrixBuffer, 0, NULL, &sceneBuffer, 0, 0);
+    m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
     m_pDeviceContext->UpdateSubresource(m_pTransparentSceneBuffer, 0, NULL, &sceneBuffer, 0, 0);
   }
 
@@ -570,7 +568,6 @@ bool Renderer::render() {
   m_pDeviceContext->ClearState();
 
   ID3D11RenderTargetView* views[] = { m_pBackBufferRTV };
-  //m_pDeviceContext->OMSetRenderTargets(1, views, nullptr);
   m_pDeviceContext->OMSetRenderTargets(1, views, m_pDepthBufferDSV);
 
   static const FLOAT BackColor[4] = { 0.75f, 0.25f, 0.25f, 1.0f };
@@ -596,7 +593,6 @@ bool Renderer::render() {
 
   m_pDeviceContext->RSSetScissorRects(1, &rect);
 
-  //m_pCubeMap->render(m_pDeviceContext);
 
   m_pDeviceContext->RSSetState(m_pRasterizerState);
   m_pDeviceContext->OMSetDepthStencilState(m_pDepthState, 0);
@@ -623,7 +619,7 @@ bool Renderer::render() {
 
   m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pWorldMatrixBuffer1);
   m_pDeviceContext->DrawIndexed(36, 0, 0);
-
+  m_pCubeMap->render(m_pDeviceContext);
   m_pDeviceContext->IASetIndexBuffer(m_pTransparentIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
   ID3D11Buffer* vertexBuffers[] = { m_pTransparentVertexBuffer };
   UINT strides[] = { 12 };
