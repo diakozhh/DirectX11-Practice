@@ -578,7 +578,6 @@ bool Renderer::getState() {
     timeStart = timeCur;
   }
   t = (timeCur - timeStart) / 1000.0f;
-  std::size_t countSec = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - timeCur;
   WorldMatrixBuffer wmb;
 
   wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
