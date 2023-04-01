@@ -36,6 +36,12 @@
     <ClCompile Include="texture.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="D3DInclude.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="lights.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.h">
@@ -59,6 +65,12 @@
     <ClInclude Include="utils.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="D3DInclude.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="lights.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="vShader.hlsl" />
@@ -67,5 +79,9 @@
     <FxCompile Include="CubeMapVertexShader.hlsl" />
     <FxCompile Include="TransVertexShader.hlsl" />
     <FxCompile Include="TransPixelShader.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="sceneBuffer.hlsli" />
+    <None Include="calcLight.hlsli" />
   </ItemGroup>
 </Project>

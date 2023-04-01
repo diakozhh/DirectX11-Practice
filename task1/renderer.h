@@ -5,24 +5,38 @@
 #include <d3d11.h>
 #include <directxmath.h>
 #include <string>
+#include <directxmath.h>
+#include <memory>
 
 #include "camera.h"
 #include "input.h"
 #include "utils.h"
 #include "cubeMap.h"
 #include "texture.h"
+#include "lights.h"
 
 struct Vertex {
-  float x, y, z;
-  float u, v;
+  DirectX::XMFLOAT3 pos;
+  DirectX::XMFLOAT2 uv;
+  DirectX::XMFLOAT3 normal;
+  DirectX::XMFLOAT3 tangent;
 };
 
 struct WorldMatrixBuffer {
   XMMATRIX mWorldMatrix;
+  DirectX::XMFLOAT4 shine;
 };
 
 struct SceneMatrixBuffer {
   XMMATRIX mViewProjectionMatrix;
+  DirectX::XMFLOAT4 cameraPosition;
+};
+
+struct LightMatrixBuffer {
+  int lightCount[4];
+  DirectX::XMFLOAT4 lightPositions[maxLightNumber];
+  DirectX::XMFLOAT4 lightColors[maxLightNumber];
+  DirectX::XMFLOAT4 ambientColor;
 };
 
 struct TransparentWorldBuffer
@@ -55,6 +69,7 @@ private:
   ID3D11Buffer* m_pWorldMatrixBuffer1 = nullptr;
 
   ID3D11Buffer* m_pSceneMatrixBuffer = nullptr;
+  ID3D11Buffer* m_pLightMatrixBuffer = nullptr;
   ID3D11RasterizerState* m_pRasterizerState = nullptr;
   ID3D11SamplerState* m_pSampler = nullptr;
   
@@ -75,6 +90,8 @@ private:
   ID3D11Texture2D* m_pDepthBuffer = nullptr;
   ID3D11DepthStencilView* m_pDepthBufferDSV = nullptr;
 
+  static constexpr const DirectX::XMFLOAT4 ambientColor_{ 0.27f, 0.05f, 0.81f, 1.0f };
+
   UINT m_width = 1280;
   UINT m_height = 720;
 
@@ -83,6 +100,7 @@ private:
 
   CubeMap* m_pCubeMap = nullptr;
   std::vector<Texture> m_textureArray;
+  std::shared_ptr<Lights> m_pLights;
 
   HRESULT setupBackBuffer();
   HRESULT initScene();
