@@ -1,25 +1,37 @@
-cbuffer WorldMatrixBuffer : register (b0) {
-  float4x4 worldMatrix;
+#include "sceneBuffer.hlsli"
+
+cbuffer WorldBuffer : register (b0)
+{
+  float4x4 world;
+  float4 shine;  // x - specular power
 };
 
-cbuffer SceneMatrixBuffer : register (b1) {
-  float4x4 viewProjMatrix;
-}
-
-struct VSInput {
+struct VSInput
+{
   float3 position : POSITION;
-  float2 uv : TEXCOORD;
+  float2 texCoord : TEXCOORD;
+  float3 normal : NORMAL;
+  float3 tangent : TANGENT;
 };
 
-struct VSOutput {
-  float4 position : SV_POSITION;
-  float2 uv : TEXCOORD;
+struct VSOutput
+{
+  float4 position : SV_Position;
+  float4 worldPos : POSITION;
+  float2 texCoord : TEXCOORD;
+  float3 normal : NORMAL;
+  float3 tangent : TANGENT;
 };
 
-VSOutput main(VSInput vertex) {
-  VSOutput result;
-  result.position = mul(viewProjMatrix, mul(worldMatrix, float4(vertex.position, 1.0f)));
-  result.uv = vertex.uv;
+VSOutput main(VSInput input)
+{
+  VSOutput output;
 
-  return result;
+  output.worldPos = mul(world, float4(input.position, 1.0f));
+  output.position = mul(viewProj, output.worldPos);
+  output.texCoord = input.texCoord;
+  output.normal = mul(world, float4(input.normal, 1.0f)).xyz;
+  output.tangent = mul(world, float4(input.tangent, 1.0f)).xyz;
+
+  return output;
 }
