@@ -6,7 +6,7 @@
 RenderTexture::RenderTexture(ID3D11Device* device, const unsigned width, const unsigned height) :
   m_pDevice(device), m_pRTTexture(nullptr), m_pRTV(nullptr), m_pSRV(nullptr)
 {
-  if (!Resize(width, height))
+  if (!resize(width, height))
     throw std::exception("Failed to resize render target");
 }
 
@@ -17,8 +17,11 @@ RenderTexture::~RenderTexture()
   SAFE_RELEASE(m_pRTTexture);
 }
 
-bool RenderTexture::Resize(const unsigned width, const unsigned height)
+bool RenderTexture::resize(const unsigned width, const unsigned height)
 {
+  SAFE_RELEASE(m_pSRV);
+  SAFE_RELEASE(m_pRTV);
+  SAFE_RELEASE(m_pRTTexture);
   D3D11_TEXTURE2D_DESC textureDesc;
   ZeroMemory(&textureDesc, sizeof(textureDesc));
 

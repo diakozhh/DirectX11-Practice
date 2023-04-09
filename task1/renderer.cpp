@@ -6,6 +6,9 @@
 
 #include "renderer.h"
 #include "D3DInclude.h"
+
+#define FARVIEW 100.0f
+#define NEERVIEW 0.1f
 namespace {
   static const Vertex Vertices[] = {
         {{-0.5, -0.5,  0.5}, {0,1}, {0,-1,0}, {1,0,0}},
@@ -565,7 +568,7 @@ bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pI
       hr = S_FALSE;
   }
   if(SUCCEEDED(hr))
-    m_pFrustum->Init(0.1f);
+    m_pFrustum->Init(NEERVIEW);
 
   return SUCCEEDED(hr);
 }
@@ -589,10 +592,9 @@ bool Renderer::getState() {
     timeStart = timeCur;
   }
   t = (timeCur - timeStart) / 1000.0f;
-  //std::size_t countSec = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - timeCur;
   GeomMatrixBuffer gmb[maxCubeNumber];
   for (std::size_t i = 0; i < m_pCubeModelVector.size(); ++i) {
-    gmb[i].mWorldMatrix = XMMatrixRotationX(t) * XMMatrixTranslation(m_pCubeModelVector[i].pos.x, m_pCubeModelVector[i].pos.y, m_pCubeModelVector[i].pos.z);
+    gmb[i].mWorldMatrix = XMMatrixRotationX(m_pCubeModelVector[i].pos.x * t) * XMMatrixRotationY(m_pCubeModelVector[i].pos.y * t) * XMMatrixTranslation(m_pCubeModelVector[i].pos.x, m_pCubeModelVector[i].pos.y, m_pCubeModelVector[i].pos.z);
     gmb[i].norm = gmb[i].mWorldMatrix;
     gmb[i].shineSpeedTexIdNm = m_pCubeModelVector[i].shineSpeedIdNm;
   }
@@ -614,15 +616,25 @@ bool Renderer::getState() {
   XMMATRIX mProjection = XMMatrixPerspectiveFovLH(
       XM_PIDIV2, 
       m_width / (FLOAT)m_height, 
-      100.0f, 0.01f);
+      FARVIEW, NEERVIEW);
 
   m_pFrustum->ConstructFrustum(mView, mProjection);
 
   m_cubeIndexies.clear();
   for (int i = 0; i < maxCubeNumber; i++) {
-    XMFLOAT4 min, max;
-    XMStoreFloat4(&min, XMVector4Transform(XMLoadFloat4(&AABB[0]), gmb[i].mWorldMatrix));
-    XMStoreFloat4(&max, XMVector4Transform(XMLoadFloat4(&AABB[1]), gmb[i].mWorldMatrix));
+    XMFLOAT4 min, max, vec;
+    XMStoreFloat4(&vec, XMVector4Transform(XMLoadFloat4(&AABB[0]), gmb[i].mWorldMatrix));
+    max = vec;
+    min = vec;
+    for (int j = 1; j < 8; j++) {
+      XMStoreFloat4(&vec, XMVector4Transform(XMLoadFloat4(&AABB[j]), gmb[i].mWorldMatrix));
+      max.x = max.x >= vec.x ? max.x : vec.x;
+      max.y = max.y >= vec.y ? max.y : vec.y;
+      max.z = max.z >= vec.z ? max.z : vec.z;
+      min.x = min.x <= vec.x ? min.x : vec.x;
+      min.y = min.y <= vec.y ? min.y : vec.y;
+      min.z = min.z <= vec.z ? min.z : vec.z;
+    }
     if (m_pFrustum->CheckRectangle(max.x, max.y, max.z, min.x, min.y, min.z)) {
       m_cubeIndexies.push_back(i);
     }
@@ -638,12 +650,7 @@ bool Renderer::getState() {
     
     for (int i = 0; i < m_cubeIndexies.size(); i++)
       sceneBuffer.indexBuffer[i] = XMINT4(m_cubeIndexies[i], 0, 0, 0);
-
-    sceneBuffer.cameraPosition.x = pov.x;
-    sceneBuffer.cameraPosition.y = pov.y;
-    sceneBuffer.cameraPosition.z = pov.z;
     m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
-    //m_pDeviceContext->UpdateSubresource(m_pTransparentSceneBuffer, 0, NULL, &sceneBuffer, 0, 0);
   }
 
   m_pCubeMap->getState(m_pDeviceContext, mView, mProjection, pov);
@@ -759,8 +766,6 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pDevice);
 
   SAFE_RELEASE(m_pRasterizerState);
-  //SAFE_RELEASE(m_pWorldMatrixBuffer);
-  //SAFE_RELEASE(m_pWorldMatrixBuffer1);
   SAFE_RELEASE(m_pSceneMatrixBuffer);
   SAFE_RELEASE(m_pSampler);
 
@@ -773,7 +778,6 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pTransparentIndexBuffer);
   SAFE_RELEASE(m_pTransparentWorldBuffer);
   SAFE_RELEASE(m_pTransparentWorldBuffer1);
-  //SAFE_RELEASE(m_pTransparentSceneBuffer);
   SAFE_RELEASE(m_pTransparentRasterizerState);
   SAFE_RELEASE(m_pTransparentDepthState);
   SAFE_RELEASE(m_pTransparentBlendState);
@@ -781,10 +785,9 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pDepthBuffer);
   SAFE_RELEASE(m_pDepthBufferDSV);
   SAFE_RELEASE(m_pLightMatrixBuffer);
-
-  SAFE_RELEASE(m_pLightBuffer);
   SAFE_RELEASE(m_pGeomMatrixBuffer);
   SAFE_RELEASE(m_pFrustum);
+  
   for (auto t : m_textureArray) {
     t.Release();
   }
@@ -806,6 +809,7 @@ bool Renderer::winResize(UINT width, UINT height) {
       hr = setupBackBuffer();
       m_pInput->resize(width, height);
       m_pCubeMap->resize(width, height);
+      m_pRenderTexture->resize(width, height);
     }
     return SUCCEEDED(hr);
   }

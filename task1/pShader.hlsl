@@ -1,18 +1,10 @@
 #include "calcLight.hlsli"
 #include "geomBuffer.hlsli"
 
-Texture2D cubeTexture : register (t0);
+Texture2DArray cubeTexture : register (t0);
 Texture2D cubeNormalTexture : register (t1);
 SamplerState cubeSampler : register(s0);
 SamplerState cubeNormalSampler : register (s1);
-
-/*
-cbuffer WorldBuffer : register (b0)
-{
-  float4x4 world;
-  float4 shine;  // x - specular power
-};
-*/
 
 struct VSOutput
 {

@@ -7,7 +7,7 @@ class RenderTexture
 public:
   RenderTexture(ID3D11Device* device, const unsigned width, const unsigned height);
   ~RenderTexture();
-  bool Resize(const unsigned width, const unsigned height);
+  bool resize(const unsigned width, const unsigned height);
   void SetRenderTarget(ID3D11DeviceContext* deviceContext, ID3D11DepthStencilView* depthStencilView);
   void ClearRenderTarget(
     ID3D11DeviceContext* deviceContext,

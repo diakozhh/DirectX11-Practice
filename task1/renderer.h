@@ -28,8 +28,14 @@ struct Vertex {
 };
 
 static const XMFLOAT4 AABB[] = {
-  {-0.5, -0.5, -0.5, 1.0},
-  {0.5,  0.5, 0.5, 1.0}
+  {-0.5f, -0.5f, -0.5f, 1.0f},
+  {0.5f, -0.5f, -0.5f, 1.0f},
+  {-0.5f, 0.5f, -0.5f, 1.0f},
+  {-0.5f, -0.5f, 0.5f, 1.0f},
+  {0.5f, 0.5f, -0.5f, 1.0f},
+  {0.5f, -0.5f, 0.5f, 1.0f},
+  {-0.5f, 0.5f, 0.5f, 1.0f},
+  {0.5f,  0.5f, 0.5f, 1.0f}
 };
 
 struct GeomMatrixBuffer {
@@ -40,7 +46,6 @@ struct GeomMatrixBuffer {
 
 struct SceneMatrixBuffer {
   XMMATRIX mViewProjectionMatrix;
-  DirectX::XMFLOAT4 cameraPosition;
   DirectX::XMINT4 indexBuffer[maxCubeNumber];
 };
 
@@ -71,28 +76,17 @@ private:
   ID3D11DeviceContext* m_pDeviceContext = nullptr;
   IDXGISwapChain* m_pSwapChain = nullptr;
   ID3D11RenderTargetView* m_pBackBufferRTV = nullptr;
-
   ID3D11Buffer* m_pIndexBuffer = nullptr;
   ID3D11Buffer* m_pVertexBuffer = nullptr;
-
   ID3D11VertexShader* m_pVertexShader = nullptr;
   ID3D11PixelShader* m_pPixelShader = nullptr;
-
   ID3D11InputLayout* m_pInputLayout = nullptr;
-
-  //ID3D11Buffer* m_pWorldMatrixBuffer = nullptr;
-  //ID3D11Buffer* m_pWorldMatrixBuffer1 = nullptr;
-
   ID3D11Buffer* m_pGeomMatrixBuffer = nullptr;
-  ID3D11Buffer* m_pLightBuffer = nullptr;
-
   ID3D11Buffer* m_pSceneMatrixBuffer = nullptr;
   ID3D11Buffer* m_pLightMatrixBuffer = nullptr;
   ID3D11RasterizerState* m_pRasterizerState = nullptr;
   ID3D11SamplerState* m_pSampler = nullptr;
-  
   ID3D11DepthStencilState* m_pDepthState = nullptr;
-
   ID3D11VertexShader* m_pTransparentVertexShader = nullptr;
   ID3D11PixelShader* m_pTransparentPixelShader = nullptr;
   ID3D11InputLayout* m_pTransparentInputLayout = nullptr;
@@ -100,7 +94,6 @@ private:
   ID3D11Buffer* m_pTransparentIndexBuffer = nullptr;
   ID3D11Buffer* m_pTransparentWorldBuffer = nullptr;
   ID3D11Buffer* m_pTransparentWorldBuffer1 = nullptr;
-  ID3D11Buffer* m_pTransparentSceneBuffer = nullptr;
   ID3D11RasterizerState* m_pTransparentRasterizerState = nullptr;
   ID3D11DepthStencilState* m_pTransparentDepthState = nullptr;
   ID3D11BlendState* m_pTransparentBlendState = nullptr;
