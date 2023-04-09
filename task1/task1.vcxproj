@@ -155,10 +155,13 @@
     <ClCompile Include="cubeMap.cpp" />
     <ClCompile Include="D3DInclude.cpp" />
     <ClCompile Include="DDSTextureLoader.cpp" />
+    <ClCompile Include="frustum.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="lights.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="postEffect.cpp" />
     <ClCompile Include="renderer.cpp" />
+    <ClCompile Include="renderTexture.cpp" />
     <ClCompile Include="texture.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -166,9 +169,12 @@
     <ClInclude Include="cubeMap.h" />
     <ClInclude Include="D3DInclude.h" />
     <ClInclude Include="DDSTextureLoader.h" />
+    <ClInclude Include="frustum.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="lights.h" />
+    <ClInclude Include="postEffect.h" />
     <ClInclude Include="renderer.h" />
+    <ClInclude Include="renderTexture.h" />
     <ClInclude Include="texture.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
@@ -188,6 +194,22 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.0</ShaderModel>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="postEffectPShader.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.0</ShaderModel>
+    </FxCompile>
+    <FxCompile Include="postEffectVShader.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.0</ShaderModel>
     </FxCompile>
     <FxCompile Include="pShader.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
@@ -220,6 +242,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="calcLight.hlsli" />
+    <None Include="defines.hlsli" />
+    <None Include="geomBuffer.hlsli" />
+    <None Include="lightBuffer.hlsli" />
     <None Include="sceneBuffer.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

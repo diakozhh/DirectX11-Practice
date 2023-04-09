@@ -1,4 +1,11 @@
-cbuffer SceneBuffer : register (b1)
+#include "defines.hlsli"
+
+cbuffer SceneConstantBuffer : register (b1)
+{
+  float4x4 viewProj;
+  int4 indexBuffer[MAX_CUBES]; // x - index
+};
+/*/cbuffer SceneBuffer : register (b1)
 {
   float4x4 viewProj;
   float4 cameraPos;
@@ -9,4 +16,4 @@ cbuffer LightBuffer : register (b2)
   float4 lightPos[10];
   float4 lightColor[10];
   float4 ambientColor;
-};
+};*/

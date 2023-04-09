@@ -14,6 +14,11 @@
 #include "cubeMap.h"
 #include "texture.h"
 #include "lights.h"
+#include "renderTexture.h"
+#include "postEffect.h"
+#include "frustum.h"
+
+constexpr const std::size_t maxCubeNumber = 100;
 
 struct Vertex {
   DirectX::XMFLOAT3 pos;
@@ -22,18 +27,26 @@ struct Vertex {
   DirectX::XMFLOAT3 tangent;
 };
 
-struct WorldMatrixBuffer {
-  XMMATRIX mWorldMatrix;
-  DirectX::XMFLOAT4 shine;
+static const XMFLOAT4 AABB[] = {
+  {-0.5, -0.5, -0.5, 1.0},
+  {0.5,  0.5, 0.5, 1.0}
+};
+
+struct GeomMatrixBuffer {
+  DirectX::XMMATRIX mWorldMatrix;
+  DirectX::XMMATRIX norm;
+  DirectX::XMFLOAT4 shineSpeedTexIdNm;
 };
 
 struct SceneMatrixBuffer {
   XMMATRIX mViewProjectionMatrix;
   DirectX::XMFLOAT4 cameraPosition;
+  DirectX::XMINT4 indexBuffer[maxCubeNumber];
 };
 
 struct LightMatrixBuffer {
-  int lightCount[4];
+  DirectX::XMFLOAT4 cameraPosition;
+  DirectX::XMINT4 lightCount;
   DirectX::XMFLOAT4 lightPositions[maxLightNumber];
   DirectX::XMFLOAT4 lightColors[maxLightNumber];
   DirectX::XMFLOAT4 ambientColor;
@@ -50,6 +63,8 @@ struct VertexPos
   float x, y, z;
 };
 
+
+
 class Renderer {
 private:
   ID3D11Device* m_pDevice = nullptr;
@@ -65,8 +80,11 @@ private:
 
   ID3D11InputLayout* m_pInputLayout = nullptr;
 
-  ID3D11Buffer* m_pWorldMatrixBuffer = nullptr;
-  ID3D11Buffer* m_pWorldMatrixBuffer1 = nullptr;
+  //ID3D11Buffer* m_pWorldMatrixBuffer = nullptr;
+  //ID3D11Buffer* m_pWorldMatrixBuffer1 = nullptr;
+
+  ID3D11Buffer* m_pGeomMatrixBuffer = nullptr;
+  ID3D11Buffer* m_pLightBuffer = nullptr;
 
   ID3D11Buffer* m_pSceneMatrixBuffer = nullptr;
   ID3D11Buffer* m_pLightMatrixBuffer = nullptr;
@@ -102,8 +120,21 @@ private:
   std::vector<Texture> m_textureArray;
   std::shared_ptr<Lights> m_pLights;
 
+  std::shared_ptr<RenderTexture> m_pRenderTexture;
+  std::shared_ptr<PostEffect> m_pPostEffect;
+
+  struct CubeModel
+  {
+    DirectX::XMFLOAT4 pos;
+    DirectX::XMFLOAT4 shineSpeedIdNm;
+  };
+  std::vector<CubeModel> m_pCubeModelVector;
+  std::vector<int> m_cubeIndexies;
+  
+  Frustum* m_pFrustum = nullptr;
+
   HRESULT setupBackBuffer();
-  HRESULT initScene();
+  HRESULT initScene(HWND hWnd);
   void inputMovement();
 
 public:
