@@ -18,7 +18,9 @@
 #include "postEffect.h"
 #include "frustum.h"
 
-constexpr const std::size_t maxCubeNumber = 100;
+#include "defines.hlsli"
+
+constexpr const int maxCubeNumber = 100;
 
 struct Vertex {
   DirectX::XMFLOAT3 pos;
@@ -46,7 +48,7 @@ struct GeomMatrixBuffer {
 
 struct SceneMatrixBuffer {
   XMMATRIX mViewProjectionMatrix;
-  DirectX::XMINT4 indexBuffer[maxCubeNumber];
+  XMFLOAT4 planes[6];
 };
 
 struct LightMatrixBuffer {
@@ -68,7 +70,11 @@ struct VertexPos
   float x, y, z;
 };
 
-
+struct CullParams {
+  XMINT4 numShapes; // x - objects count;
+  XMFLOAT4 bbMin[maxCubeNumber];
+  XMFLOAT4 bbMax[maxCubeNumber];
+};
 
 class Renderer {
 private:
@@ -78,8 +84,11 @@ private:
   ID3D11RenderTargetView* m_pBackBufferRTV = nullptr;
   ID3D11Buffer* m_pIndexBuffer = nullptr;
   ID3D11Buffer* m_pVertexBuffer = nullptr;
+  
   ID3D11VertexShader* m_pVertexShader = nullptr;
   ID3D11PixelShader* m_pPixelShader = nullptr;
+  ID3D11ComputeShader* m_pFrustumShader = nullptr;
+
   ID3D11InputLayout* m_pInputLayout = nullptr;
   ID3D11Buffer* m_pGeomMatrixBuffer = nullptr;
   ID3D11Buffer* m_pSceneMatrixBuffer = nullptr;
@@ -100,6 +109,14 @@ private:
 
   ID3D11Texture2D* m_pDepthBuffer = nullptr;
   ID3D11DepthStencilView* m_pDepthBufferDSV = nullptr;
+
+  ID3D11Buffer* m_pCullParams = nullptr;
+  ID3D11Buffer* m_pInderectArgsSrc = nullptr;
+  ID3D11Buffer* m_pInderectArgs = nullptr;
+  ID3D11UnorderedAccessView* m_pInderectArgsUAV = nullptr;
+  ID3D11Buffer* m_pGeomBufferInstVis = nullptr;
+  ID3D11Buffer* m_pGeomBufferInstVisGpu = nullptr;
+  ID3D11UnorderedAccessView* m_pGeomBufferInstVisGpu_UAV = nullptr;
 
   static constexpr const DirectX::XMFLOAT4 ambientColor_{ 0.27f, 0.05f, 0.81f, 1.0f };
 
@@ -126,9 +143,18 @@ private:
   
   Frustum* m_pFrustum = nullptr;
 
+  ID3D11Query* m_queries[MAX_QUERY];
+  unsigned int m_curFrame = 0;
+  unsigned int m_lastCompletedFrame = 0;
+
+  int m_cubesCountGPU = maxCubeNumber;
+
   HRESULT setupBackBuffer();
   HRESULT initScene(HWND hWnd);
   void inputMovement();
+  void ReadQueries();
+
+  HWND hwnd;
 
 public:
   bool deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pInput);

@@ -108,6 +108,12 @@ HRESULT Renderer::initScene(HWND hWnd) {
     {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
     {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0},
     {"TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0}, };
+  D3D11_QUERY_DESC desc;
+  desc.Query = D3D11_QUERY_PIPELINE_STATISTICS;
+  desc.MiscFlags = 0;
+  for (int i = 0; i < MAX_QUERY && SUCCEEDED(hr); i++) {
+    hr = m_pDevice->CreateQuery(&desc, &m_queries[i]);
+  }
 
   //cubes
   for (int i = 0; i < maxCubeNumber; i++) {
@@ -156,7 +162,7 @@ HRESULT Renderer::initScene(HWND hWnd) {
 
   ID3D10Blob* vShaderBuffer = nullptr;
   ID3D10Blob* pShaderBuffer = nullptr;
-  
+  ID3D10Blob* fcShaderBuffer = nullptr;
   int flags = 0;
   #ifdef _DEBUG
     flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
@@ -171,12 +177,17 @@ HRESULT Renderer::initScene(HWND hWnd) {
     hr = m_pDevice->CreatePixelShader(pShaderBuffer->GetBufferPointer(), pShaderBuffer->GetBufferSize(), NULL, &m_pPixelShader);
   }
   if (SUCCEEDED(hr)) {
+    hr = D3DCompileFromFile(L"frustumCulling.hlsl", NULL, &includeObj, "main", "cs_5_0", flags, 0, &fcShaderBuffer, NULL);
+    hr = m_pDevice->CreateComputeShader(fcShaderBuffer->GetBufferPointer(), fcShaderBuffer->GetBufferSize(), NULL, &m_pFrustumShader);
+  }
+  if (SUCCEEDED(hr)) {
     int numElements = sizeof(InputDesc) / sizeof(InputDesc[0]);
     hr = m_pDevice->CreateInputLayout(InputDesc, numElements, vShaderBuffer->GetBufferPointer(), vShaderBuffer->GetBufferSize(), &m_pInputLayout);
   }
 
   SAFE_RELEASE(vShaderBuffer);
   SAFE_RELEASE(pShaderBuffer);
+  SAFE_RELEASE(fcShaderBuffer);
 
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
@@ -186,22 +197,41 @@ HRESULT Renderer::initScene(HWND hWnd) {
     desc.CPUAccessFlags = 0;
     desc.MiscFlags = 0;
     desc.StructureByteStride = 0;
+    
+    CullParams cullParams;
 
     GeomMatrixBuffer geomMatrixBuffer[maxCubeNumber];
     for (int i = 0; i < m_pCubeModelVector.size(); i++) {
       geomMatrixBuffer[i].mWorldMatrix = XMMatrixTranslation(m_pCubeModelVector[i].pos.x, m_pCubeModelVector[i].pos.y, m_pCubeModelVector[i].pos.z);
       geomMatrixBuffer[i].norm = geomMatrixBuffer[i].mWorldMatrix;
       geomMatrixBuffer[i].shineSpeedTexIdNm = m_pCubeModelVector[i].shineSpeedIdNm;
+
+      XMFLOAT4 min, max;
+      XMStoreFloat4(&min, XMVector4Transform(XMLoadFloat4(&AABB[0]), geomMatrixBuffer[i].mWorldMatrix));
+      XMStoreFloat4(&max, XMVector4Transform(XMLoadFloat4(&AABB[7]), geomMatrixBuffer[i].mWorldMatrix));
+      cullParams.bbMin[i] = min;
+      cullParams.bbMax[i] = max;
     }
+    cullParams.numShapes = XMINT4(int(m_pCubeModelVector.size()), 0, 0, 0);
 
     D3D11_SUBRESOURCE_DATA data;
     data.pSysMem = &geomMatrixBuffer;
     data.SysMemPitch = sizeof(geomMatrixBuffer);
     data.SysMemSlicePitch = 0;
 
-
-
     hr = m_pDevice->CreateBuffer(&desc, &data, &m_pGeomMatrixBuffer);
+    assert(SUCCEEDED(hr));
+
+    desc.ByteWidth = sizeof(CullParams);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+    data.pSysMem = &cullParams;
+    data.SysMemPitch = sizeof(cullParams);
+    data.SysMemSlicePitch = 0;
+    hr = m_pDevice->CreateBuffer(&desc, &data, &m_pCullParams);
     assert(SUCCEEDED(hr));
   }
   if (SUCCEEDED(hr)) {
@@ -231,6 +261,64 @@ HRESULT Renderer::initScene(HWND hWnd) {
     desc.SlopeScaledDepthBias = 0.0f;
 
     hr = m_pDevice->CreateRasterizerState(&desc, &m_pRasterizerState);
+    assert(SUCCEEDED(hr));
+  }
+
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(D3D11_DRAW_INDEXED_INSTANCED_INDIRECT_ARGS);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    desc.StructureByteStride = sizeof(UINT);
+
+    hr = m_pDevice->CreateBuffer(&desc, nullptr, &m_pInderectArgsSrc);
+    if (SUCCEEDED(hr)) {
+      hr = m_pDevice->CreateUnorderedAccessView(m_pInderectArgsSrc, nullptr, &m_pInderectArgsUAV);
+    }
+    assert(SUCCEEDED(hr));
+  }
+
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(D3D11_DRAW_INDEXED_INSTANCED_INDIRECT_ARGS);
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = 0;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+    desc.StructureByteStride = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, nullptr, &m_pInderectArgs);
+    assert(SUCCEEDED(hr));
+  }
+
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(XMINT4) * maxCubeNumber;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+    desc.StructureByteStride = sizeof(XMINT4);
+
+    hr = m_pDevice->CreateBuffer(&desc, nullptr, &m_pGeomBufferInstVisGpu);
+    if (SUCCEEDED(hr)) {
+      hr = m_pDevice->CreateUnorderedAccessView(m_pGeomBufferInstVisGpu, nullptr, &m_pGeomBufferInstVisGpu_UAV);
+    }
+    assert(SUCCEEDED(hr));
+  }
+
+  if (SUCCEEDED(hr)) {
+    D3D11_BUFFER_DESC desc = {};
+    desc.ByteWidth = sizeof(XMINT4) * maxCubeNumber;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    desc.CPUAccessFlags = 0;
+    desc.MiscFlags = 0;
+    desc.StructureByteStride = 0;
+
+    hr = m_pDevice->CreateBuffer(&desc, nullptr, &m_pGeomBufferInstVis);
     assert(SUCCEEDED(hr));
   }
 
@@ -468,9 +556,8 @@ HRESULT Renderer::initScene(HWND hWnd) {
 bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pInput) {
   m_pCamera = pCamera;
   m_pInput = pInput;
-
+  hwnd = hWnd;
   HRESULT hr;
-
   IDXGIFactory* pFactory = nullptr;
   hr = CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory);
 
@@ -578,8 +665,27 @@ void Renderer::inputMovement() {
   m_pCamera->getMouseState(mouseMove.x, mouseMove.y, mouseMove.z);
 }
 
+void Renderer::ReadQueries() {
+  D3D11_QUERY_DATA_PIPELINE_STATISTICS stats;
+  while (m_lastCompletedFrame < m_curFrame) {
+    HRESULT hr = m_pDeviceContext->GetData(m_queries[m_lastCompletedFrame % MAX_QUERY], &stats, sizeof(D3D11_QUERY_DATA_PIPELINE_STATISTICS), 0);
+    if (hr == S_OK) {
+      m_cubesCountGPU = int(stats.IAPrimitives / 12);
+      m_lastCompletedFrame++;
+    }
+    else {
+      break;
+    }
+  }
+}
+
 bool Renderer::getState() {
   HRESULT hr = S_OK;
+
+  std::string name = "Culled GPU: " + std::to_string(m_cubesCountGPU);
+  auto winName = LPCSTR(name.c_str());
+  SetWindowTextA(hwnd, winName);
+
   m_pCamera->getState();
   m_pInput->getState();
 
@@ -618,6 +724,8 @@ bool Renderer::getState() {
       m_width / (FLOAT)m_height, 
       FARVIEW, NEERVIEW);
 
+  CullParams cullParams;
+
   m_pFrustum->ConstructFrustum(mView, mProjection);
 
   m_cubeIndexies.clear();
@@ -635,10 +743,12 @@ bool Renderer::getState() {
       min.y = min.y <= vec.y ? min.y : vec.y;
       min.z = min.z <= vec.z ? min.z : vec.z;
     }
-    if (m_pFrustum->CheckRectangle(max.x, max.y, max.z, min.x, min.y, min.z)) {
-      m_cubeIndexies.push_back(i);
-    }
+    cullParams.bbMin[i] = min;
+    cullParams.bbMax[i] = max;
   }
+  cullParams.numShapes = XMINT4(maxCubeNumber, 0, 0, 0);
+
+  m_pDeviceContext->UpdateSubresource(m_pCullParams, 0, nullptr, &cullParams, 0, 0);
 
   D3D11_MAPPED_SUBRESOURCE subresource;
   hr = m_pDeviceContext->Map(m_pSceneMatrixBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource);
@@ -647,11 +757,30 @@ bool Renderer::getState() {
   if (SUCCEEDED(hr)) {
     SceneMatrixBuffer& sceneBuffer = *reinterpret_cast<SceneMatrixBuffer*>(subresource.pData);
     sceneBuffer.mViewProjectionMatrix = XMMatrixMultiply(mView, mProjection);
-    
-    for (int i = 0; i < m_cubeIndexies.size(); i++)
-      sceneBuffer.indexBuffer[i] = XMINT4(m_cubeIndexies[i], 0, 0, 0);
+    XMFLOAT4* planes = m_pFrustum->GetPlanes();
+    for (int i = 0; i < 6; i++) {
+      sceneBuffer.planes[i] = planes[i];
+    }
     m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
   }
+
+  D3D11_DRAW_INDEXED_INSTANCED_INDIRECT_ARGS args;
+  args.IndexCountPerInstance = 36;
+  args.InstanceCount = 0;
+  args.StartInstanceLocation = 0;
+  args.BaseVertexLocation = 0;
+  args.StartIndexLocation = 0;
+  m_pDeviceContext->UpdateSubresource(m_pInderectArgsSrc, 0, nullptr, &args, 0, 0);
+  UINT groupNumber = maxCubeNumber / 64u + !!(maxCubeNumber % 64u);
+  m_pDeviceContext->CSSetConstantBuffers(0, 1, &m_pCullParams);
+  m_pDeviceContext->CSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
+  m_pDeviceContext->CSSetUnorderedAccessViews(0, 1, &m_pInderectArgsUAV, nullptr);
+  m_pDeviceContext->CSSetUnorderedAccessViews(1, 1, &m_pGeomBufferInstVisGpu_UAV, nullptr);
+  m_pDeviceContext->CSSetShader(m_pFrustumShader, nullptr, 0);
+  m_pDeviceContext->Dispatch(groupNumber, 1, 1);
+
+  m_pDeviceContext->CopyResource(m_pGeomBufferInstVis, m_pGeomBufferInstVisGpu);
+  m_pDeviceContext->CopyResource(m_pInderectArgs, m_pInderectArgsSrc);
 
   m_pCubeMap->getState(m_pDeviceContext, mView, mProjection, pov);
 
@@ -704,11 +833,16 @@ bool Renderer::render() {
   m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pGeomMatrixBuffer);
   m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
   m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pGeomMatrixBuffer);
+  m_pDeviceContext->VSSetConstantBuffers(2, 1, &m_pGeomBufferInstVis);
   m_pDeviceContext->PSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
   m_pDeviceContext->PSSetConstantBuffers(2, 1, &m_pLightMatrixBuffer);
   m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-  m_pDeviceContext->DrawIndexedInstanced(36, (UINT)m_cubeIndexies.size(), 0, 0, 0);
+  m_pDeviceContext->Begin(m_queries[m_curFrame % MAX_QUERY]);
+  m_pDeviceContext->DrawIndexedInstancedIndirect(m_pInderectArgs, 0);
+  m_pDeviceContext->End(m_queries[m_curFrame % MAX_QUERY]);
+  ++m_curFrame;
+  ReadQueries();
 
   m_pCubeMap->render(m_pDeviceContext);
   m_pDeviceContext->IASetIndexBuffer(m_pTransparentIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
@@ -761,7 +895,7 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pVertexBuffer);
   SAFE_RELEASE(m_pVertexShader);
   SAFE_RELEASE(m_pPixelShader);
-
+  SAFE_RELEASE(m_pFrustumShader);
   SAFE_RELEASE(m_pInputLayout);
   SAFE_RELEASE(m_pDevice);
 
@@ -788,8 +922,18 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pGeomMatrixBuffer);
   SAFE_RELEASE(m_pFrustum);
   
+  SAFE_RELEASE(m_pInderectArgsSrc);
+  SAFE_RELEASE(m_pInderectArgs);
+  SAFE_RELEASE(m_pGeomBufferInstVisGpu)
+  SAFE_RELEASE(m_pGeomBufferInstVisGpu_UAV)
+  SAFE_RELEASE(m_pGeomBufferInstVis)
+  SAFE_RELEASE(m_pInderectArgsUAV);
+  SAFE_RELEASE(m_pCullParams);
   for (auto t : m_textureArray) {
     t.Release();
+  }
+  for (auto& q : m_queries) {
+    q->Release();
   }
 
   m_textureArray.clear();
