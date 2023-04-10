@@ -6,6 +6,9 @@
 
 #include "renderer.h"
 #include "D3DInclude.h"
+
+#define FARVIEW 100.0f
+#define NEERVIEW 0.1f
 namespace {
   static const Vertex Vertices[] = {
         {{-0.5, -0.5,  0.5}, {0,1}, {0,-1,0}, {1,0,0}},
@@ -97,7 +100,7 @@ HRESULT Renderer::setupBackBuffer() {
   return hr;
 }
 
-HRESULT Renderer::initScene() {
+HRESULT Renderer::initScene(HWND hWnd) {
   HRESULT hr = S_OK;
 
   static const D3D11_INPUT_ELEMENT_DESC InputDesc[] = {
@@ -106,7 +109,15 @@ HRESULT Renderer::initScene() {
     {"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0},
     {"TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0}, };
 
-
+  //cubes
+  for (int i = 0; i < maxCubeNumber; i++) {
+    CubeModel tmp;
+    float textureIndex = (float)(rand() % 2);
+    tmp.pos = XMFLOAT4((float)(rand() % 10 - 5), (float)(rand() % 10 - 5), (float)(rand() % 10 - 5), (float)(rand() % 6 - 3));
+    tmp.shineSpeedIdNm = XMFLOAT4(300.0f, (float)(rand() % 5), textureIndex, textureIndex > 0.0f ? 0.0f : 1.0f);
+    m_pCubeModelVector.push_back(tmp);
+  }
+  //vertex buffer
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
     desc.ByteWidth = sizeof(Vertices);
@@ -124,7 +135,7 @@ HRESULT Renderer::initScene() {
     hr = m_pDevice->CreateBuffer(&desc, &data, &m_pVertexBuffer);
     assert(SUCCEEDED(hr));
   }
-
+  //indices buffer
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
     desc.ByteWidth = sizeof(Indices);
@@ -169,24 +180,28 @@ HRESULT Renderer::initScene() {
 
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
-    desc.ByteWidth = sizeof(WorldMatrixBuffer);
+    desc.ByteWidth = sizeof(GeomMatrixBuffer) * maxCubeNumber;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     desc.CPUAccessFlags = 0;
     desc.MiscFlags = 0;
     desc.StructureByteStride = 0;
 
-    WorldMatrixBuffer worldMatrixBuffer;
-    worldMatrixBuffer.mWorldMatrix = DirectX::XMMatrixIdentity();
+    GeomMatrixBuffer geomMatrixBuffer[maxCubeNumber];
+    for (int i = 0; i < m_pCubeModelVector.size(); i++) {
+      geomMatrixBuffer[i].mWorldMatrix = XMMatrixTranslation(m_pCubeModelVector[i].pos.x, m_pCubeModelVector[i].pos.y, m_pCubeModelVector[i].pos.z);
+      geomMatrixBuffer[i].norm = geomMatrixBuffer[i].mWorldMatrix;
+      geomMatrixBuffer[i].shineSpeedTexIdNm = m_pCubeModelVector[i].shineSpeedIdNm;
+    }
 
     D3D11_SUBRESOURCE_DATA data;
-    data.pSysMem = &worldMatrixBuffer;
-    data.SysMemPitch = sizeof(worldMatrixBuffer);
+    data.pSysMem = &geomMatrixBuffer;
+    data.SysMemPitch = sizeof(geomMatrixBuffer);
     data.SysMemSlicePitch = 0;
 
-    hr = m_pDevice->CreateBuffer(&desc, &data, &m_pWorldMatrixBuffer);
-    if(SUCCEEDED(hr))
-      hr = m_pDevice->CreateBuffer(&desc, &data, &m_pWorldMatrixBuffer1);
+
+
+    hr = m_pDevice->CreateBuffer(&desc, &data, &m_pGeomMatrixBuffer);
     assert(SUCCEEDED(hr));
   }
   if (SUCCEEDED(hr)) {
@@ -220,7 +235,8 @@ HRESULT Renderer::initScene() {
   }
 
   try {
-    m_textureArray.emplace_back(m_pDevice, m_pDeviceContext, L"data/kerenski.dds");
+    Texture tmp(m_pDevice, m_pDeviceContext, { L"data/kerenski.dds",  L"data/brick_diffuse.dds" });
+    m_textureArray.push_back(tmp);
     m_textureArray.emplace_back(m_pDevice, m_pDeviceContext, L"data/brick_normal.dds");
     
     m_pLights = std::make_shared<Lights>();
@@ -250,6 +266,9 @@ HRESULT Renderer::initScene() {
     return E_FAIL;
   }
 
+  m_pRenderTexture = std::make_shared<RenderTexture>(m_pDevice, m_width, m_height);
+  m_pPostEffect = std::make_shared<PostEffect>(m_pDevice, hWnd, m_width, m_width);
+
   if (SUCCEEDED(hr)) {
     D3D11_BUFFER_DESC desc = {};
     desc.ByteWidth = sizeof(LightMatrixBuffer);
@@ -261,9 +280,9 @@ HRESULT Renderer::initScene() {
 
     LightMatrixBuffer lightMatrixBuffer;
 
-    lightMatrixBuffer.lightCount[0] = static_cast<int>(m_pLights->GetNumber());
-    lightMatrixBuffer.lightCount[1] = 1;
-    lightMatrixBuffer.lightCount[2] = 0;
+    lightMatrixBuffer.lightCount.x = static_cast<int>(m_pLights->GetNumber());
+    lightMatrixBuffer.lightCount.y = 1;
+    lightMatrixBuffer.lightCount.z = 0;
     auto lightPositions = m_pLights->GetPositions();
     std::copy(lightPositions.begin(), lightPositions.end(), lightMatrixBuffer.lightPositions);
     auto lightColors = m_pLights->GetColors();
@@ -383,12 +402,12 @@ HRESULT Renderer::initScene() {
     desc.MiscFlags = 0;
     desc.StructureByteStride = 0;
 
-    WorldMatrixBuffer worldMatrixBuffer;
-    worldMatrixBuffer.mWorldMatrix = DirectX::XMMatrixIdentity();
+    TransparentWorldBuffer transMatrixBuffer;
+    transMatrixBuffer.worldMatrix = DirectX::XMMatrixIdentity();
 
     D3D11_SUBRESOURCE_DATA data;
-    data.pSysMem = &worldMatrixBuffer;
-    data.SysMemPitch = sizeof(worldMatrixBuffer);
+    data.pSysMem = &transMatrixBuffer;
+    data.SysMemPitch = sizeof(transMatrixBuffer);
     data.SysMemSlicePitch = 0;
 
     hr = m_pDevice->CreateBuffer(&desc, NULL, &m_pTransparentWorldBuffer);
@@ -431,19 +450,6 @@ HRESULT Renderer::initScene() {
     blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ZERO;
 
     hr = m_pDevice->CreateBlendState(&blendDesc, &m_pTransparentBlendState);
-    assert(SUCCEEDED(hr));
-  }
-
-  if (SUCCEEDED(hr)) {
-    D3D11_BUFFER_DESC desc = {};
-    desc.ByteWidth = sizeof(SceneMatrixBuffer);
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    desc.CPUAccessFlags = 0;
-    desc.MiscFlags = 0;
-    desc.StructureByteStride = 0;
-
-    hr = m_pDevice->CreateBuffer(&desc, NULL, &m_pTransparentSceneBuffer);
     assert(SUCCEEDED(hr));
   }
   
@@ -532,7 +538,7 @@ bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pI
   }
   
   if (SUCCEEDED(hr)) {
-    hr = initScene();
+    hr = initScene(hWnd);
   }
 
   SAFE_RELEASE(pSelectedAdapter);
@@ -547,6 +553,7 @@ bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pI
     if(!m_pInput)
       hr = S_FALSE;
   }
+  m_pCubeMap = new CubeMap(m_pDevice, m_pDeviceContext, m_width, m_height, 10, 10);
   if (SUCCEEDED(hr)) {
     if(!m_pCubeMap)
       hr = S_FALSE;
@@ -555,7 +562,14 @@ bool Renderer::deviceInit(HINSTANCE hinst, HWND hWnd, Camera* pCamera, Input* pI
   if (FAILED(hr)) {
     deviceCleanup();
   }
-  m_pCubeMap = new CubeMap(m_pDevice, m_pDeviceContext, m_width, m_height, 10, 10);
+  if (SUCCEEDED(hr)) {
+    m_pFrustum = new Frustum;
+    if(!m_pFrustum)
+      hr = S_FALSE;
+  }
+  if(SUCCEEDED(hr))
+    m_pFrustum->Init(NEERVIEW);
+
   return SUCCEEDED(hr);
 }
 
@@ -578,17 +592,13 @@ bool Renderer::getState() {
     timeStart = timeCur;
   }
   t = (timeCur - timeStart) / 1000.0f;
-  std::size_t countSec = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() - timeCur;
-  WorldMatrixBuffer wmb;
-
-  wmb.mWorldMatrix = DirectX::XMMatrixMultiply(
-    DirectX::XMMatrixRotationY(t),
-    DirectX::XMMatrixTranslation(0.0f, 0.0f, -1.0f));
-  m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer, 0, NULL, &wmb, 0, 0);
-
-  wmb.mWorldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, 1.0f);
-  m_pDeviceContext->UpdateSubresource(m_pWorldMatrixBuffer1, 0, NULL, &wmb, 0, 0);
-  wmb.shine.x = 1000.0f;
+  GeomMatrixBuffer gmb[maxCubeNumber];
+  for (std::size_t i = 0; i < m_pCubeModelVector.size(); ++i) {
+    gmb[i].mWorldMatrix = XMMatrixRotationX(m_pCubeModelVector[i].pos.x * t) * XMMatrixRotationY(m_pCubeModelVector[i].pos.y * t) * XMMatrixTranslation(m_pCubeModelVector[i].pos.x, m_pCubeModelVector[i].pos.y, m_pCubeModelVector[i].pos.z);
+    gmb[i].norm = gmb[i].mWorldMatrix;
+    gmb[i].shineSpeedTexIdNm = m_pCubeModelVector[i].shineSpeedIdNm;
+  }
+  m_pDeviceContext->UpdateSubresource(m_pGeomMatrixBuffer, 0, NULL, &gmb, 0, 0);
 
   TransparentWorldBuffer transparentWorldBuffer;
   transparentWorldBuffer.worldMatrix = DirectX::XMMatrixTranslation(0.0f, 0.0f, -0.1f);
@@ -606,7 +616,29 @@ bool Renderer::getState() {
   XMMATRIX mProjection = XMMatrixPerspectiveFovLH(
       XM_PIDIV2, 
       m_width / (FLOAT)m_height, 
-      100.0f, 0.01f);
+      FARVIEW, NEERVIEW);
+
+  m_pFrustum->ConstructFrustum(mView, mProjection);
+
+  m_cubeIndexies.clear();
+  for (int i = 0; i < maxCubeNumber; i++) {
+    XMFLOAT4 min, max, vec;
+    XMStoreFloat4(&vec, XMVector4Transform(XMLoadFloat4(&AABB[0]), gmb[i].mWorldMatrix));
+    max = vec;
+    min = vec;
+    for (int j = 1; j < 8; j++) {
+      XMStoreFloat4(&vec, XMVector4Transform(XMLoadFloat4(&AABB[j]), gmb[i].mWorldMatrix));
+      max.x = max.x >= vec.x ? max.x : vec.x;
+      max.y = max.y >= vec.y ? max.y : vec.y;
+      max.z = max.z >= vec.z ? max.z : vec.z;
+      min.x = min.x <= vec.x ? min.x : vec.x;
+      min.y = min.y <= vec.y ? min.y : vec.y;
+      min.z = min.z <= vec.z ? min.z : vec.z;
+    }
+    if (m_pFrustum->CheckRectangle(max.x, max.y, max.z, min.x, min.y, min.z)) {
+      m_cubeIndexies.push_back(i);
+    }
+  }
 
   D3D11_MAPPED_SUBRESOURCE subresource;
   hr = m_pDeviceContext->Map(m_pSceneMatrixBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource);
@@ -615,11 +647,10 @@ bool Renderer::getState() {
   if (SUCCEEDED(hr)) {
     SceneMatrixBuffer& sceneBuffer = *reinterpret_cast<SceneMatrixBuffer*>(subresource.pData);
     sceneBuffer.mViewProjectionMatrix = XMMatrixMultiply(mView, mProjection);
-    sceneBuffer.cameraPosition.x = pov.x;
-    sceneBuffer.cameraPosition.y = pov.y;
-    sceneBuffer.cameraPosition.z = pov.z;
+    
+    for (int i = 0; i < m_cubeIndexies.size(); i++)
+      sceneBuffer.indexBuffer[i] = XMINT4(m_cubeIndexies[i], 0, 0, 0);
     m_pDeviceContext->Unmap(m_pSceneMatrixBuffer, 0);
-    m_pDeviceContext->UpdateSubresource(m_pTransparentSceneBuffer, 0, NULL, &sceneBuffer, 0, 0);
   }
 
   m_pCubeMap->getState(m_pDeviceContext, mView, mProjection, pov);
@@ -629,13 +660,6 @@ bool Renderer::getState() {
 
 bool Renderer::render() {
   m_pDeviceContext->ClearState();
-
-  ID3D11RenderTargetView* views[] = { m_pBackBufferRTV };
-  m_pDeviceContext->OMSetRenderTargets(1, views, m_pDepthBufferDSV);
-
-  static const FLOAT BackColor[4] = { 0.75f, 0.25f, 0.25f, 1.0f };
-  m_pDeviceContext->ClearRenderTargetView(m_pBackBufferRTV, BackColor);
-  m_pDeviceContext->ClearDepthStencilView(m_pDepthBufferDSV, D3D11_CLEAR_DEPTH, 0.0f, 0);
 
   D3D11_VIEWPORT vp;
   vp.TopLeftX = 0;
@@ -655,12 +679,14 @@ bool Renderer::render() {
   rect.bottom = m_height;
 
   m_pDeviceContext->RSSetScissorRects(1, &rect);
+  m_pRenderTexture->SetRenderTarget(m_pDeviceContext, m_pDepthBufferDSV);
+  m_pRenderTexture->ClearRenderTarget(m_pDeviceContext, m_pDepthBufferDSV, DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
 
 
   m_pDeviceContext->RSSetState(m_pRasterizerState);
   m_pDeviceContext->OMSetDepthStencilState(m_pDepthState, 0);
   ID3D11SamplerState* samplers[] = { m_pSampler };
-  m_pDeviceContext->PSSetSamplers(0, 1, samplers);
+  m_pDeviceContext->PSSetSamplers(0, 1, &m_pSampler);
 
   ID3D11ShaderResourceView* resources[] = { m_textureArray[0].GetTexture(), m_textureArray[1].GetTexture() };
   m_pDeviceContext->PSSetShaderResources(0, 2, resources);
@@ -675,16 +701,15 @@ bool Renderer::render() {
   m_pDeviceContext->IASetInputLayout(m_pInputLayout);
   m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
-  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pWorldMatrixBuffer);
+  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pGeomMatrixBuffer);
   m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
-  m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pWorldMatrixBuffer);
+  m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pGeomMatrixBuffer);
   m_pDeviceContext->PSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
   m_pDeviceContext->PSSetConstantBuffers(2, 1, &m_pLightMatrixBuffer);
   m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
-  m_pDeviceContext->DrawIndexed(36, 0, 0);
 
-  m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pWorldMatrixBuffer1);
-  m_pDeviceContext->DrawIndexed(36, 0, 0);
+  m_pDeviceContext->DrawIndexedInstanced(36, (UINT)m_cubeIndexies.size(), 0, 0, 0);
+
   m_pCubeMap->render(m_pDeviceContext);
   m_pDeviceContext->IASetIndexBuffer(m_pTransparentIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
   ID3D11Buffer* vertexBuffers[] = { m_pTransparentVertexBuffer };
@@ -701,7 +726,7 @@ bool Renderer::render() {
 
   m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer);
   m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer);
-  m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pTransparentSceneBuffer);
+  m_pDeviceContext->VSSetConstantBuffers(1, 1, &m_pSceneMatrixBuffer);
 
   m_pDeviceContext->PSSetConstantBuffers(2, 1, &m_pLightMatrixBuffer);
 
@@ -711,6 +736,15 @@ bool Renderer::render() {
   m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer1);
   m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pTransparentWorldBuffer1);
   m_pDeviceContext->DrawIndexed(static_cast<UINT>(coloredPlaneIndices.size()), 0, 0);
+
+  ID3D11RenderTargetView* views[] = { m_pBackBufferRTV };
+  m_pDeviceContext->OMSetRenderTargets(1, views, m_pDepthBufferDSV);
+
+  static const FLOAT BackColor[4] = { 0.75f, 0.25f, 0.25f, 1.0f };
+  m_pDeviceContext->ClearRenderTargetView(m_pBackBufferRTV, BackColor);
+  m_pDeviceContext->ClearDepthStencilView(m_pDepthBufferDSV, D3D11_CLEAR_DEPTH, 0.0f, 0);
+
+  m_pPostEffect->Process(m_pDeviceContext, m_pRenderTexture->GetSRV(), m_pBackBufferRTV, vp);
 
   HRESULT hr = m_pSwapChain->Present(1, 0);
   assert(SUCCEEDED(hr));
@@ -732,8 +766,6 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pDevice);
 
   SAFE_RELEASE(m_pRasterizerState);
-  SAFE_RELEASE(m_pWorldMatrixBuffer);
-  SAFE_RELEASE(m_pWorldMatrixBuffer1);
   SAFE_RELEASE(m_pSceneMatrixBuffer);
   SAFE_RELEASE(m_pSampler);
 
@@ -746,7 +778,6 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pTransparentIndexBuffer);
   SAFE_RELEASE(m_pTransparentWorldBuffer);
   SAFE_RELEASE(m_pTransparentWorldBuffer1);
-  SAFE_RELEASE(m_pTransparentSceneBuffer);
   SAFE_RELEASE(m_pTransparentRasterizerState);
   SAFE_RELEASE(m_pTransparentDepthState);
   SAFE_RELEASE(m_pTransparentBlendState);
@@ -754,6 +785,9 @@ void Renderer::deviceCleanup() {
   SAFE_RELEASE(m_pDepthBuffer);
   SAFE_RELEASE(m_pDepthBufferDSV);
   SAFE_RELEASE(m_pLightMatrixBuffer);
+  SAFE_RELEASE(m_pGeomMatrixBuffer);
+  SAFE_RELEASE(m_pFrustum);
+  
   for (auto t : m_textureArray) {
     t.Release();
   }
@@ -775,6 +809,7 @@ bool Renderer::winResize(UINT width, UINT height) {
       hr = setupBackBuffer();
       m_pInput->resize(width, height);
       m_pCubeMap->resize(width, height);
+      m_pRenderTexture->resize(width, height);
     }
     return SUCCEEDED(hr);
   }

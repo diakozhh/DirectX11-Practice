@@ -37,7 +37,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
       pRenderer->render();
   }
   pRenderer->deviceCleanup();
-
+  delete pRenderer;
   return (int)msg.wParam;
 }
 
@@ -93,7 +93,7 @@ HRESULT InitWindow(HINSTANCE hInstance, int nCmdShow) {
     delete pRenderer;
     return E_FAIL;
   }
-
+  
   return TRUE;
 }
 

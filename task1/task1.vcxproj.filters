@@ -42,6 +42,15 @@
     <ClCompile Include="lights.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="postEffect.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="frustum.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="renderTexture.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.h">
@@ -71,17 +80,57 @@
     <ClInclude Include="lights.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="postEffect.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="frustum.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="renderTexture.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="vShader.hlsl" />
-    <FxCompile Include="pShader.hlsl" />
-    <FxCompile Include="CubeMapPixelShader.hlsl" />
-    <FxCompile Include="CubeMapVertexShader.hlsl" />
-    <FxCompile Include="TransVertexShader.hlsl" />
-    <FxCompile Include="TransPixelShader.hlsl" />
+    <FxCompile Include="CubeMapPixelShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="CubeMapVertexShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="postEffectPShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="postEffectVShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="pShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="TransPixelShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="TransVertexShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="vShader.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="sceneBuffer.hlsli" />
-    <None Include="calcLight.hlsli" />
+    <None Include="calcLight.hlsli">
+      <Filter>Файлы ресурсов</Filter>
+    </None>
+    <None Include="sceneBuffer.hlsli">
+      <Filter>Файлы ресурсов</Filter>
+    </None>
+    <None Include="defines.hlsli">
+      <Filter>Файлы ресурсов</Filter>
+    </None>
+    <None Include="geomBuffer.hlsli">
+      <Filter>Файлы ресурсов</Filter>
+    </None>
+    <None Include="lightBuffer.hlsli">
+      <Filter>Файлы ресурсов</Filter>
+    </None>
   </ItemGroup>
 </Project>
