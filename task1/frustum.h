@@ -10,10 +10,8 @@ public:
   void Release() {};
   // Function to build frustum
   void ConstructFrustum(XMMATRIX viewMatrix, XMMATRIX projectionMatrix);
-
-  // Functions to check if rectengle is in frustum
-  bool CheckRectangle(float maxWidth, float maxHeight, float maxDepth, float minWidth, float minHeight, float minDepth);
+  XMFLOAT4* GetPlanes() {return m_planes;}
 private:
   float m_screenDepth;
-  float m_planes[6][4];
+  XMFLOAT4 m_planes[6];
 };
